@@ -1,0 +1,55 @@
+steps:
+  # Docker イメージをビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/oshipitch/app:$COMMIT_SHA'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/oshipitch/app:latest'
+      - '.'
+    id: 'build-image'
+
+  # Artifact Registry にプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/oshipitch/app:$COMMIT_SHA'
+    id: 'push-image'
+
+  # Cloud Run にデプロイ
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'oshipitch'
+      - '--image'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/oshipitch/app:$COMMIT_SHA'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '3000'
+      - '--memory'
+      - '512Mi'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '10'
+    id: 'deploy-cloud-run'
+
+# ビルド設定
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+# タイムアウト設定（10分）
+timeout: '600s'
+
+# イメージを保存
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/oshipitch/app:$COMMIT_SHA'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/oshipitch/app:latest'
