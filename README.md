@@ -4,7 +4,7 @@
 
 ## サービスURL
 
-<!-- デプロイ後に記載 -->
+https://oshi-pitch-380618347949.asia-northeast1.run.app/
 
 ## サービス概要
 
