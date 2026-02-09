@@ -40,10 +40,13 @@ export async function POST(request: Request) {
       }, { status: 500 })
     }
 
-    // その他のエラー
+    // その他のエラー（generate.tsからの具体的なメッセージをそのまま返す）
+    const message = error instanceof Error
+      ? error.message
+      : 'プレゼン資料の生成に失敗しました。もう一度お試しください。'
     return NextResponse.json<GenerateResponse>({
       success: false,
-      error: 'プレゼン資料の生成に失敗しました。もう一度お試しください。'
+      error: message
     }, { status: 500 })
   }
 }

@@ -3,6 +3,7 @@ import { generateVtuberPitch } from '@/lib/gemini/generate'
 import { VtuberProfileCard } from '@/components/vtuber-profile-card'
 import { RecommendedVideoCard } from '@/components/recommended-video-card'
 import { QuoteSection } from '@/components/quote-section'
+import { GroundingSources } from '@/components/grounding-sources'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ArrowLeft, Share2 } from 'lucide-react'
@@ -72,6 +73,14 @@ export default async function VtuberPage({ params }: PageProps) {
 
           {/* 名言・エピソード */}
           <QuoteSection quotes={pitch.quotes} />
+
+          {/* 情報源 */}
+          {pitch.sources && pitch.sources.length > 0 && (
+            <>
+              <Separator />
+              <GroundingSources sources={pitch.sources} />
+            </>
+          )}
         </div>
       </main>
     )

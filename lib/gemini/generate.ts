@@ -1,66 +1,136 @@
 import { getGeminiClient } from './client'
-import { SYSTEM_INSTRUCTION, createUserPrompt } from './prompt'
-import type { VtuberPitch } from '@/types/vtuber'
+import {
+  RESEARCH_INSTRUCTION,
+  createResearchPrompt,
+  STRUCTURE_INSTRUCTION,
+  createStructurePrompt,
+} from './prompt'
+import { buildYouTubeAvatarUrl } from '@/lib/youtube'
+import type { VtuberPitch, GroundingSource } from '@/types/vtuber'
 
-export async function generateVtuberPitch(vtuberName: string): Promise<VtuberPitch> {
-  const genAI = getGeminiClient()
+// Phase 1: Google Search Groundingでリサーチ
+async function researchVtuber(vtuberName: string) {
+  const ai = getGeminiClient()
 
-  const model = genAI.getGenerativeModel({
+  const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'object' as const,
-        properties: {
-          profile: {
-            type: 'object' as const,
-            properties: {
-              name: { type: 'string' as const },
-              affiliation: { type: 'string' as const, nullable: true },
-              debutDate: { type: 'string' as const }
-            },
-            required: ['name', 'affiliation', 'debutDate']
-          },
-          catchphrase: { type: 'string' as const },
-          recommendedFor: {
-            type: 'array' as const,
-            items: { type: 'string' as const },
-            minItems: 3,
-            maxItems: 3
-          },
-          recommendedVideos: {
-            type: 'array' as const,
-            items: {
-              type: 'object' as const,
-              properties: {
-                title: { type: 'string' as const },
-                url: { type: 'string' as const },
-                description: { type: 'string' as const }
-              },
-              required: ['title', 'url', 'description']
-            },
-            minItems: 2,
-            maxItems: 3
-          },
-          quotes: {
-            type: 'array' as const,
-            items: { type: 'string' as const },
-            minItems: 1,
-            maxItems: 3
-          }
-        },
-        required: ['profile', 'catchphrase', 'recommendedFor', 'recommendedVideos', 'quotes']
-      }
+    contents: createResearchPrompt(vtuberName),
+    config: {
+      systemInstruction: RESEARCH_INSTRUCTION,
+      tools: [{ googleSearch: {} }],
     },
-    systemInstruction: SYSTEM_INSTRUCTION
   })
 
-  const result = await model.generateContent(createUserPrompt(vtuberName))
-  const response = result.response
-  const text = response.text()
+  const researchText = response.text ?? ''
 
-  // JSONをパース
-  const pitch: VtuberPitch = JSON.parse(text)
+  // groundingMetadataから情報源を抽出
+  const sources: GroundingSource[] = []
+  const groundingMetadata = response.candidates?.[0]?.groundingMetadata
+  if (groundingMetadata?.groundingChunks) {
+    for (const chunk of groundingMetadata.groundingChunks) {
+      const web = chunk.web
+      if (web?.uri && web?.title) {
+        sources.push({ title: web.title, url: web.uri })
+      }
+    }
+  }
+
+  return { researchText, sources }
+}
+
+// Phase 2: リサーチ結果を構造化JSON出力
+async function structureVtuberPitch(researchText: string): Promise<VtuberPitch> {
+  const ai = getGeminiClient()
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: createStructurePrompt(researchText),
+    config: {
+      systemInstruction: STRUCTURE_INSTRUCTION,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          profile: {
+            type: 'OBJECT',
+            properties: {
+              name: { type: 'STRING' },
+              affiliation: { type: 'STRING', nullable: true },
+              debutDate: { type: 'STRING' },
+              youtubeChannelId: { type: 'STRING' },
+            },
+            required: ['name', 'affiliation', 'debutDate'],
+          },
+          catchphrase: { type: 'STRING' },
+          recommendedFor: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+            minItems: '3',
+            maxItems: '3',
+          },
+          recommendedVideos: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                title: { type: 'STRING' },
+                url: { type: 'STRING' },
+                description: { type: 'STRING' },
+              },
+              required: ['title', 'url', 'description'],
+            },
+            minItems: '2',
+            maxItems: '3',
+          },
+          quotes: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+            minItems: '1',
+            maxItems: '3',
+          },
+        },
+        required: ['profile', 'catchphrase', 'recommendedFor', 'recommendedVideos', 'quotes'],
+      },
+    },
+  })
+
+  const text = response.text ?? '{}'
+  return JSON.parse(text) as VtuberPitch
+}
+
+export async function generateVtuberPitch(vtuberName: string): Promise<VtuberPitch> {
+  // Phase 1: リサーチ
+  let researchText: string
+  let sources: GroundingSource[]
+  try {
+    const result = await researchVtuber(vtuberName)
+    researchText = result.researchText
+    sources = result.sources
+  } catch (error) {
+    console.error(`Research failed for "${vtuberName}":`, error)
+    throw new Error('情報の取得に失敗しました。正確なVTuber名を入力してください。')
+  }
+
+  if (!researchText) {
+    throw new Error('VTuberの情報が見つかりませんでした。正確な名前を入力してください。')
+  }
+
+  // Phase 2: 構造化
+  let pitch: VtuberPitch
+  try {
+    pitch = await structureVtuberPitch(researchText)
+  } catch (error) {
+    console.error(`Structure failed for "${vtuberName}":`, error)
+    throw new Error('プレゼン資料の生成に失敗しました。もう一度お試しください。')
+  }
+
+  // アバターURL構築
+  if (pitch.profile.youtubeChannelId) {
+    pitch.profile.avatarUrl = buildYouTubeAvatarUrl(pitch.profile.youtubeChannelId)
+  }
+
+  // 情報源を付与
+  pitch.sources = sources
 
   return pitch
 }

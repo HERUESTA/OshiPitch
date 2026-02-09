@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 export function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY
@@ -7,5 +7,5 @@ export function getGeminiClient() {
     throw new Error('GEMINI_API_KEY is not configured')
   }
 
-  return new GoogleGenerativeAI(apiKey)
+  return new GoogleGenAI({ apiKey })
 }
