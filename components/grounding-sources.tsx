@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react'
+import { LinkIcon } from 'lucide-react'
 import type { GroundingSource } from '@/types/vtuber'
 
 interface Props {
@@ -10,7 +10,7 @@ export function GroundingSources({ sources }: Props) {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-bold">情報源</h2>
+      <h2 className="text-lg font-bold">情報源</h2>
       <ul className="space-y-2">
         {sources.map((source, index) => (
           <li key={index}>
@@ -18,9 +18,9 @@ export function GroundingSources({ sources }: Props) {
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-purple-400 transition-colors"
             >
-              <ExternalLink className="h-4 w-4 shrink-0" />
+              <LinkIcon className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{source.title}</span>
             </a>
           </li>

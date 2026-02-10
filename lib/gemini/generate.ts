@@ -5,7 +5,7 @@ import {
   STRUCTURE_INSTRUCTION,
   createStructurePrompt,
 } from './prompt'
-import { buildYouTubeAvatarUrl } from '@/lib/youtube'
+import { fetchChannelInfo, fetchFirstStreamVideo, fetchPopularVideos } from '@/lib/youtube'
 import type { VtuberPitch, GroundingSource } from '@/types/vtuber'
 
 // Phase 1: Google Search Groundingでリサーチ
@@ -62,34 +62,20 @@ async function structureVtuberPitch(researchText: string): Promise<VtuberPitch> 
             required: ['name', 'affiliation', 'debutDate'],
           },
           catchphrase: { type: 'STRING' },
+          streamingStyles: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+            minItems: '2',
+            maxItems: '4',
+          },
           recommendedFor: {
             type: 'ARRAY',
             items: { type: 'STRING' },
             minItems: '3',
             maxItems: '3',
           },
-          recommendedVideos: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                title: { type: 'STRING' },
-                url: { type: 'STRING' },
-                description: { type: 'STRING' },
-              },
-              required: ['title', 'url', 'description'],
-            },
-            minItems: '2',
-            maxItems: '3',
-          },
-          quotes: {
-            type: 'ARRAY',
-            items: { type: 'STRING' },
-            minItems: '1',
-            maxItems: '3',
-          },
         },
-        required: ['profile', 'catchphrase', 'recommendedFor', 'recommendedVideos', 'quotes'],
+        required: ['profile', 'catchphrase', 'streamingStyles', 'recommendedFor'],
       },
     },
   })
@@ -124,9 +110,21 @@ export async function generateVtuberPitch(vtuberName: string): Promise<VtuberPit
     throw new Error('プレゼン資料の生成に失敗しました。もう一度お試しください。')
   }
 
-  // アバターURL構築
-  if (pitch.profile.youtubeChannelId) {
-    pitch.profile.avatarUrl = buildYouTubeAvatarUrl(pitch.profile.youtubeChannelId)
+  // YouTube API: アバター画像と人気動画を取得
+  const channelId = pitch.profile.youtubeChannelId
+  if (channelId) {
+    const [channelInfo, firstStream, videos] = await Promise.all([
+      fetchChannelInfo(channelId),
+      fetchFirstStreamVideo(channelId, vtuberName),
+      fetchPopularVideos(channelId, 6),
+    ])
+    if (channelInfo) {
+      pitch.profile.avatarUrl = channelInfo.avatarUrl
+    }
+    pitch.firstStreamVideo = firstStream ?? undefined
+    pitch.recommendedVideos = videos
+  } else {
+    pitch.recommendedVideos = []
   }
 
   // 情報源を付与

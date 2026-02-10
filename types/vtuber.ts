@@ -10,7 +10,7 @@ export interface VtuberProfile {
 export interface RecommendedVideo {
   title: string
   url: string
-  description: string              // なぜおすすめか
+  thumbnailUrl: string             // YouTube APIから取得
 }
 
 export interface GroundingSource {
@@ -21,9 +21,10 @@ export interface GroundingSource {
 export interface VtuberPitch {
   profile: VtuberProfile
   catchphrase: string
+  streamingStyles: string[]        // 配信スタイル（2〜4個）
   recommendedFor: string[]         // 3つのおすすめポイント
-  recommendedVideos: RecommendedVideo[]  // 2〜3本
-  quotes: string[]                 // 名言・エピソード（1〜3個）
+  firstStreamVideo?: RecommendedVideo     // 初配信動画
+  recommendedVideos: RecommendedVideo[]  // YouTube APIから取得（Top3）
   sources?: GroundingSource[]      // 情報源
 }
 
