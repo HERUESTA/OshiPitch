@@ -20,7 +20,6 @@ export interface GroundingSource {
 
 export interface VtuberPitch {
   profile: VtuberProfile
-  catchphrase: string
   streamingStyles: string[]        // 配信スタイル（2〜4個）
   recommendedFor: string[]         // 3つのおすすめポイント
   firstStreamVideo?: RecommendedVideo     // 初配信動画

@@ -29,12 +29,13 @@ Google検索とURLコンテキストを活用して、事実に基づいた情�
 - 検索で確認できた情報のみ記載する
 - 確認できなかった項目は「不明」と記載する
 - YouTubeチャンネルIDは必ず正確に記載する
+- 前世と書かれているソースは参考にしないでください
 `
 
 export function createResearchPrompt(vtuberName: string, agency?: AgencyConfig): string {
   let prompt = `以下のVtuberについて、正確な情報を調査してください。\n\nVtuber名: ${vtuberName}`
   if (agency) {
-    prompt += `\n\n【所属事務所の公式ページ】\n${agency.name}: ${agency.talentListUrl}\nこのURLの情報を最優先で参照してください。`
+    prompt += `\n\n【所属事務所の公式サイト】\n${agency.name}: ${agency.talentListUrl}\nこのURLの情報を最優先で参照してください。`
   }
   return prompt
 }
