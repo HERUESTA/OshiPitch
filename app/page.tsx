@@ -17,30 +17,22 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
-  const handleGenerate = async (e: React.FormEvent) => {
+  const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
     setError(null)
 
-    try {
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vtuberName })
-      })
-
-      const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error)
-      }
-
-      router.push(`/${encodeURIComponent(vtuberName)}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '予期しないエラーが発生しました')
-    } finally {
-      setIsLoading(false)
+    const trimmed = vtuberName.trim()
+    if (!trimmed) {
+      setError('VTuber名を入力してください')
+      return
     }
+    if (trimmed.length > 50) {
+      setError('VTuber名は50文字以内で入力してください')
+      return
+    }
+
+    setIsLoading(true)
+    router.push(`/${encodeURIComponent(trimmed)}`)
   }
 
   return (

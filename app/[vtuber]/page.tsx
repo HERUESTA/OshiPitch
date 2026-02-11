@@ -44,10 +44,6 @@ export default async function VtuberPage({ params }: PageProps) {
                 <ArrowLeft className="h-4 w-4" />
                 戻る
               </Link>
-              <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors border border-border/50 rounded-lg px-3 py-1.5">
-                <Share2 className="h-4 w-4" />
-                URLをコピー
-              </button>
             </div>
 
             {/* プロフィールカード */}

@@ -5,19 +5,21 @@ import {
   STRUCTURE_INSTRUCTION,
   createStructurePrompt,
 } from './prompt'
+import { findAgency } from '@/lib/agencies'
 import { fetchChannelInfo, fetchFirstStreamVideo, fetchPopularVideos } from '@/lib/youtube'
 import type { VtuberPitch, GroundingSource } from '@/types/vtuber'
 
-// Phase 1: Google Search Groundingでリサーチ
+// Phase 1: Google Search Grounding + urlContextでリサーチ
 async function researchVtuber(vtuberName: string) {
   const ai = getGeminiClient()
+  const agency = findAgency(vtuberName)
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: createResearchPrompt(vtuberName),
+    contents: createResearchPrompt(vtuberName, agency),
     config: {
       systemInstruction: RESEARCH_INSTRUCTION,
-      tools: [{ googleSearch: {} }],
+      tools: [{ googleSearch: {} }, { urlContext: {} }],
     },
   })
 
@@ -25,12 +27,30 @@ async function researchVtuber(vtuberName: string) {
 
   // groundingMetadataから情報源を抽出
   const sources: GroundingSource[] = []
+  const seenUrls = new Set<string>()
+
   const groundingMetadata = response.candidates?.[0]?.groundingMetadata
   if (groundingMetadata?.groundingChunks) {
     for (const chunk of groundingMetadata.groundingChunks) {
       const web = chunk.web
       if (web?.uri && web?.title) {
+        seenUrls.add(web.uri)
         sources.push({ title: web.title, url: web.uri })
+      }
+    }
+  }
+
+  // urlContextMetadataから情報源を抽出
+  const urlContextMetadata = response.candidates?.[0]?.urlContextMetadata
+  if (urlContextMetadata?.urlMetadata) {
+    for (const meta of urlContextMetadata.urlMetadata) {
+      if (
+        meta.retrievedUrl &&
+        meta.urlRetrievalStatus === 'URL_RETRIEVAL_STATUS_SUCCESS' &&
+        !seenUrls.has(meta.retrievedUrl)
+      ) {
+        seenUrls.add(meta.retrievedUrl)
+        sources.push({ title: meta.retrievedUrl, url: meta.retrievedUrl })
       }
     }
   }
@@ -43,7 +63,7 @@ async function structureVtuberPitch(researchText: string): Promise<VtuberPitch> 
   const ai = getGeminiClient()
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.0-flash',
     contents: createStructurePrompt(researchText),
     config: {
       systemInstruction: STRUCTURE_INSTRUCTION,
