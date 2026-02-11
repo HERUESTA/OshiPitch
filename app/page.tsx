@@ -32,6 +32,7 @@ export default function Home() {
     }
 
     setIsLoading(true)
+    document.cookie = 'x-app-request=1; path=/; max-age=30; SameSite=Strict'
     router.push(`/${encodeURIComponent(trimmed)}`)
   }
 

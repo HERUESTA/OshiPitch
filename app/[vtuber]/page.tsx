@@ -47,7 +47,7 @@ export default async function VtuberPage({ params }: PageProps) {
             </div>
 
             {/* プロフィールカード */}
-            <VtuberProfileCard profile={pitch.profile} catchphrase={pitch.catchphrase} />
+            <VtuberProfileCard profile={pitch.profile} />
 
             {/* 配信スタイル */}
             <section className="space-y-4">

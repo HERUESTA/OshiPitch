@@ -4,10 +4,9 @@ import type { VtuberProfile } from '@/types/vtuber'
 
 interface Props {
   profile: VtuberProfile
-  catchphrase: string
 }
 
-export function VtuberProfileCard({ profile, catchphrase }: Props) {
+export function VtuberProfileCard({ profile }: Props) {
   const channelUrl = profile.youtubeChannelId
     ? `https://www.youtube.com/channel/${profile.youtubeChannelId}`
     : null
@@ -33,7 +32,6 @@ export function VtuberProfileCard({ profile, catchphrase }: Props) {
         {/* 情報 */}
         <div className="flex-1 min-w-0 space-y-1">
           <h1 className="text-2xl font-bold truncate">{profile.name}</h1>
-          <p className="text-sm text-purple-400 font-medium">{catchphrase}</p>
           <p className="text-xs text-muted-foreground">
             {profile.affiliation && <span>{profile.affiliation} · </span>}
             デビュー: {profile.debutDate}

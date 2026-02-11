@@ -6,7 +6,7 @@ import {
   createStructurePrompt,
 } from './prompt'
 import { findAgency } from '@/lib/agencies'
-import { fetchChannelInfo, fetchFirstStreamVideo, fetchPopularVideos } from '@/lib/youtube'
+import { resolveChannelInfo, searchChannelByName, fetchFirstStreamVideo, fetchPopularVideos } from '@/lib/youtube'
 import type { VtuberPitch, GroundingSource } from '@/types/vtuber'
 
 // Phase 1: Google Search Grounding + urlContextでリサーチ
@@ -15,11 +15,11 @@ async function researchVtuber(vtuberName: string) {
   const agency = findAgency(vtuberName)
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.0-flash',
     contents: createResearchPrompt(vtuberName, agency),
     config: {
       systemInstruction: RESEARCH_INSTRUCTION,
-      tools: [{ googleSearch: {} }, { urlContext: {} }],
+      tools: [{ googleSearch: {} }],
     },
   })
 
@@ -36,21 +36,6 @@ async function researchVtuber(vtuberName: string) {
       if (web?.uri && web?.title) {
         seenUrls.add(web.uri)
         sources.push({ title: web.title, url: web.uri })
-      }
-    }
-  }
-
-  // urlContextMetadataから情報源を抽出
-  const urlContextMetadata = response.candidates?.[0]?.urlContextMetadata
-  if (urlContextMetadata?.urlMetadata) {
-    for (const meta of urlContextMetadata.urlMetadata) {
-      if (
-        meta.retrievedUrl &&
-        meta.urlRetrievalStatus === 'URL_RETRIEVAL_STATUS_SUCCESS' &&
-        !seenUrls.has(meta.retrievedUrl)
-      ) {
-        seenUrls.add(meta.retrievedUrl)
-        sources.push({ title: meta.retrievedUrl, url: meta.retrievedUrl })
       }
     }
   }
@@ -79,9 +64,8 @@ async function structureVtuberPitch(researchText: string): Promise<VtuberPitch> 
               debutDate: { type: 'STRING' },
               youtubeChannelId: { type: 'STRING' },
             },
-            required: ['name', 'affiliation', 'debutDate'],
+            required: ['name', 'affiliation', 'debutDate', 'youtubeChannelId'],
           },
-          catchphrase: { type: 'STRING' },
           streamingStyles: {
             type: 'ARRAY',
             items: { type: 'STRING' },
@@ -95,7 +79,7 @@ async function structureVtuberPitch(researchText: string): Promise<VtuberPitch> 
             maxItems: '3',
           },
         },
-        required: ['profile', 'catchphrase', 'streamingStyles', 'recommendedFor'],
+        required: ['profile', 'streamingStyles', 'recommendedFor'],
       },
     },
   })
@@ -130,25 +114,29 @@ export async function generateVtuberPitch(vtuberName: string): Promise<VtuberPit
     throw new Error('プレゼン資料の生成に失敗しました。もう一度お試しください。')
   }
 
-  // YouTube API: アバター画像と人気動画を取得
-  const channelId = pitch.profile.youtubeChannelId
-  if (channelId) {
-    const [channelInfo, firstStream, videos] = await Promise.all([
-      fetchChannelInfo(channelId),
-      fetchFirstStreamVideo(channelId, vtuberName),
-      fetchPopularVideos(channelId, 6),
+  // YouTube API: channelId解決 → ダメなら名前検索でフォールバック
+  const rawChannelId = pitch.profile.youtubeChannelId
+  const channelInfo =
+    (rawChannelId ? await resolveChannelInfo(rawChannelId) : null) ??
+    await searchChannelByName(vtuberName)
+
+  if (channelInfo) {
+    pitch.profile.avatarUrl = channelInfo.avatarUrl
+    const [firstStream, videos] = await Promise.all([
+      fetchFirstStreamVideo(channelInfo.channelId, vtuberName),
+      fetchPopularVideos(channelInfo.channelId, 3, '歌ってみた OR 歌枠 OR MV'),
     ])
-    if (channelInfo) {
-      pitch.profile.avatarUrl = channelInfo.avatarUrl
-    }
     pitch.firstStreamVideo = firstStream ?? undefined
     pitch.recommendedVideos = videos
   } else {
     pitch.recommendedVideos = []
   }
 
-  // 情報源を付与
+  // 情報源を付与（前世系のソースは除外、最大5件）
+  const ngWords = ['前世', '中の人', '中身']
   pitch.sources = sources
+    .filter((s) => !ngWords.some((w) => s.title.includes(w) || s.url.includes(w)))
+    .slice(0, 5)
 
   return pitch
 }

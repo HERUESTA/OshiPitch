@@ -6,12 +6,21 @@ function getApiKey(): string | null {
   return process.env.YOUTUBE_API_KEY ?? null
 }
 
+function isValidChannelId(channelId: string): boolean {
+  return /^UC[\w-]{22}$/.test(channelId)
+}
+
+function isHandle(value: string): boolean {
+  return value.startsWith('@')
+}
+
 /**
- * チャンネルIDからアバター画像URLを取得する
+ * ハンドル(@xxx)やチャンネルIDを受け取り、正規のchannelIdとアバターURLを返す。
+ * channels APIを1回だけ叩いて両方解決する。
  */
-export async function fetchChannelInfo(
-  channelId: string
-): Promise<{ avatarUrl: string } | null> {
+export async function resolveChannelInfo(
+  channelIdOrHandle: string
+): Promise<{ channelId: string; avatarUrl: string } | null> {
   const apiKey = getApiKey()
   if (!apiKey) {
     console.warn('YOUTUBE_DATA_API_KEY is not set')
@@ -19,14 +28,24 @@ export async function fetchChannelInfo(
   }
 
   try {
-    const url = `${YOUTUBE_API_BASE}/channels?part=snippet&id=${encodeURIComponent(channelId)}&key=${apiKey}`
+    const url = new URL(`${YOUTUBE_API_BASE}/channels`)
+    url.searchParams.set('part', 'snippet')
+    if (isHandle(channelIdOrHandle)) {
+      url.searchParams.set('forHandle', channelIdOrHandle.slice(1))
+    } else if (isValidChannelId(channelIdOrHandle)) {
+      url.searchParams.set('id', channelIdOrHandle)
+    } else {
+      return null
+    }
+    url.searchParams.set('key', apiKey)
     const res = await fetch(url)
 
     if (!res.ok) {
+      const errorBody = await res.text()
       if (res.status === 403) {
-        console.warn('YouTube API quota exceeded')
+        console.warn('YouTube API quota exceeded', errorBody)
       } else {
-        console.error(`YouTube Channels API error: ${res.status}`)
+        console.error(`YouTube Channels API error: ${res.status}`, errorBody)
       }
       return null
     }
@@ -35,10 +54,46 @@ export async function fetchChannelInfo(
     const channel = data.items?.[0]
     if (!channel) return null
 
-    const avatarUrl = channel.snippet?.thumbnails?.high?.url
-    return avatarUrl ? { avatarUrl } : null
+    const avatarUrl = channel.snippet?.thumbnails?.high?.url ?? ''
+    return { channelId: channel.id, avatarUrl }
   } catch (error) {
     console.error('YouTube Channels API fetch failed:', error)
+    return null
+  }
+}
+
+/**
+ * VTuber名でYouTubeチャンネルを検索し、最初にヒットしたチャンネルの情報を返す。
+ * resolveChannelInfoで解決できなかった場合のフォールバック。
+ */
+export async function searchChannelByName(
+  vtuberName: string
+): Promise<{ channelId: string; avatarUrl: string } | null> {
+  const apiKey = getApiKey()
+  if (!apiKey) return null
+
+  try {
+    const url = new URL(`${YOUTUBE_API_BASE}/search`)
+    url.searchParams.set('part', 'snippet')
+    url.searchParams.set('q', vtuberName)
+    url.searchParams.set('type', 'channel')
+    url.searchParams.set('maxResults', '1')
+    url.searchParams.set('key', apiKey)
+    const res = await fetch(url)
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const item = data.items?.[0]
+    if (!item) return null
+
+    const channelId = (item.id as Record<string, string>)?.channelId
+    const snippet = item.snippet as Record<string, unknown> | undefined
+    const thumbnails = snippet?.thumbnails as Record<string, Record<string, unknown>> | undefined
+    const avatarUrl = (thumbnails?.high?.url as string) ?? ''
+
+    return channelId ? { channelId, avatarUrl } : null
+  } catch {
     return null
   }
 }
@@ -53,13 +108,24 @@ export async function fetchFirstStreamVideo(
   const apiKey = getApiKey()
   if (!apiKey) return null
 
+  if (!isValidChannelId(channelId)) {
+    console.warn(`Invalid YouTube channel ID for first stream search: "${channelId}"`)
+    return null
+  }
+
   try {
-    const query = encodeURIComponent(`${vtuberName} 初配信`)
-    const url = `${YOUTUBE_API_BASE}/search?part=snippet&channelId=${encodeURIComponent(channelId)}&q=${query}&maxResults=1&type=video&key=${apiKey}`
+    const url = new URL(`${YOUTUBE_API_BASE}/search`)
+    url.searchParams.set('part', 'snippet')
+    url.searchParams.set('channelId', channelId)
+    url.searchParams.set('q', `${vtuberName} 初配信`)
+    url.searchParams.set('maxResults', '1')
+    url.searchParams.set('type', 'video')
+    url.searchParams.set('key', apiKey)
     const res = await fetch(url)
 
     if (!res.ok) {
-      console.error(`YouTube Search API error (first stream): ${res.status}`)
+      const errorBody = await res.text()
+      console.error(`YouTube Search API error (first stream): ${res.status}`, errorBody)
       return null
     }
 
@@ -87,7 +153,8 @@ export async function fetchFirstStreamVideo(
  */
 export async function fetchPopularVideos(
   channelId: string,
-  maxResults: number = 3
+  maxResults: number = 3,
+  query?: string
 ): Promise<RecommendedVideo[]> {
   const apiKey = getApiKey()
   if (!apiKey) {
@@ -95,12 +162,25 @@ export async function fetchPopularVideos(
     return []
   }
 
+  if (!isValidChannelId(channelId)) {
+    console.warn(`Invalid YouTube channel ID for popular videos: "${channelId}"`)
+    return []
+  }
+
   try {
-    const url = `${YOUTUBE_API_BASE}/search?part=snippet&channelId=${encodeURIComponent(channelId)}&order=viewCount&maxResults=${maxResults}&type=video&key=${apiKey}`
+    const url = new URL(`${YOUTUBE_API_BASE}/search`)
+    url.searchParams.set('part', 'snippet')
+    url.searchParams.set('channelId', channelId)
+    if (query) url.searchParams.set('q', query)
+    url.searchParams.set('order', 'viewCount')
+    url.searchParams.set('maxResults', String(maxResults))
+    url.searchParams.set('type', 'video')
+    url.searchParams.set('key', apiKey)
     const res = await fetch(url)
 
     if (!res.ok) {
-      console.error(`YouTube Search API error: ${res.status}`)
+      const errorBody = await res.text()
+      console.error(`YouTube Search API error: ${res.status}`, errorBody)
       return []
     }
 
