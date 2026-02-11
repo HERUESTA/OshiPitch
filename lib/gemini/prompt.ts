@@ -1,7 +1,9 @@
-// Phase 1: リサーチ用（Google Search Grounding有効）
+import type { AgencyConfig } from '@/lib/agencies'
+
+// Phase 1: リサーチ用（Google Search Grounding + urlContext有効）
 export const RESEARCH_INSTRUCTION = `
 あなたはVtuberの情報を正確に調査するリサーチャーです。
-Google検索を活用して、事実に基づいた情報のみを提供してください。
+Google検索とURLコンテキストを活用して、事実に基づいた情報のみを提供してください。
 
 【調査項目】
 1. 正式名称と所属事務所
@@ -10,14 +12,31 @@ Google検索を活用して、事実に基づいた情報のみを提供して�
 4. 配信スタイル・活動ジャンル（ゲーム実況、歌枠、雑談など）
 5. 活動内容の特徴
 
+【情報源の優先順位】
+1. 所属事務所の公式サイト（最優先）
+2. 本人のYouTubeチャンネル概要欄
+3. 本人の公式X（Twitter）
+4. VTuber専門Wiki
+5. その他信頼できるニュースソース
+
+【主要VTuber事務所の公式サイト】
+- にじさんじ: https://www.nijisanji.jp/talents
+- ホロライブ: https://hololive.hololivepro.com/talents
+
 【重要】
+- まず公式サイトの情報を確認し、それを基準とする
+- 公式サイトと他ソースで矛盾する場合は公式を優先する
 - 検索で確認できた情報のみ記載する
 - 確認できなかった項目は「不明」と記載する
 - YouTubeチャンネルIDは必ず正確に記載する
 `
 
-export function createResearchPrompt(vtuberName: string): string {
-  return `以下のVtuberについて、Google検索で正確な情報を調査してください。\n\nVtuber名: ${vtuberName}`
+export function createResearchPrompt(vtuberName: string, agency?: AgencyConfig): string {
+  let prompt = `以下のVtuberについて、正確な情報を調査してください。\n\nVtuber名: ${vtuberName}`
+  if (agency) {
+    prompt += `\n\n【所属事務所の公式ページ】\n${agency.name}: ${agency.talentListUrl}\nこのURLの情報を最優先で参照してください。`
+  }
+  return prompt
 }
 
 // Phase 2: 構造化用（Grounding無効、JSON Schema出力）

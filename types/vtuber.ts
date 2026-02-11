@@ -27,14 +27,3 @@ export interface VtuberPitch {
   recommendedVideos: RecommendedVideo[]  // YouTube APIから取得（Top3）
   sources?: GroundingSource[]      // 情報源
 }
-
-// API Request/Response型
-export interface GenerateRequest {
-  vtuberName: string
-}
-
-export interface GenerateResponse {
-  success: boolean
-  data?: VtuberPitch
-  error?: string
-}
